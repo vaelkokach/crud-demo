@@ -1,10 +1,7 @@
 const mongoose = require('mongoose');
 const express = require('express');
 const router = express.Router();
-mongoose.connect('mongodb://localhost:27017/mongo-exercises')
-.then(()=> console.log('connected to mongoDB ... '))
-.catch(err => {console.log('couldnt connect omongodb', err)});
-
+const Joi = require('joi');
 const courseSchema = new mongoose.Schema({
     _id : String,
     name : String,
@@ -16,77 +13,85 @@ const courseSchema = new mongoose.Schema({
 });
 const Course = mongoose.model('Courses', courseSchema);
 
-async function createCourse(){//create
-
-    const course = new Course({
-        name: 'IBM data science',
-        tags: ['developer','frontend'],
-        author :'ahmet bale',
-        isPublished: true,
-        price: 20,
-        _id: new mongoose.Types.ObjectId()
+    router.post('/create', async (req, res) =>{
+        const { error } = validatecourse(req.body);// destructor
+        if(error){
+         res.status(400).send(error.details[0].message);
+         return;
+     }
+        const course = new Course({
+            name: req.body.name,
+            tags: req.body.tags,
+            author :req.body.author,
+            isPublished: req.body.isPublished,
+            price: req.body.price,
+            _id: new mongoose.Types.ObjectId()
+        });
+        course.save();
+        res.send("course created" );
+        // res.send(course);
     });
 
-    const result = await course.save(); 
-    console.log(result);
-}
-// createCourse();
  function getprice(){
  price = 20;
 return price;
 }
+        router.get('/courses', async (req, res) => { 
+            const courses = await Course
+            .find({isPublished: true, price: getprice()})
+            // .and([
+            //     {price : { $lte :10} },
+            //      {name : /.*by*./i}
+            // ])
+            .select({name : 1, author : 1, price : 1});
+            
+            if(!courses.length){ console.log("no course was found as specified");return;}
+            else {console.log(courses);}
+        });
 
-async function getCourses(price){//read
-
-const courses = await Course
-    .find({isPublished: true, price: getprice()})
-    // .and([
-    //     {price : { $lte :10} },
-    //      {name : /.*by*./i}
-    // ])
-    .select({name : 1, author : 1, price : 1});
-    return courses;
-}
-
-async function run(){
-    const courses = await getCourses();
-    if(!courses.length){ console.log("no course was found as specified");return;}
-    else {console.log(courses);}
-}
-run();
-async function updateCourse(id){//update
-
-    const course = await Course
-    .findById(id, function (err, course) {
-     if (err){
-         console.log(err);
-     }
-     else{
-         console.log("Result : ", course);
-     }
- }).clone().catch(function(err){ console.log(err)})
- //    await course.clone(); // Can `clone()` the query to allow executing the query again
-     if( !course ) {console.log('course was not found'); return;}
-    course.set({
-        isPublished: true,
-        author : 'another name',
+    router.put('/courses/update/:id', async(req, res)=> {
+        const course = await Course
+        .findById(req.params.id, function (err, course) {
+         if (err){
+             console.log(err);
+         }
+         else{
+             console.log("found course : ", course);
+         }
+     }).clone().catch(function(err){ console.log(err)})
+     //    await course.clone(); // Can `clone()` the query to allow executing the query again
+         if( !course ) res.status(404).send('course was not found');
+         const { error } = validatecourse(req.body);// destructor
+         if(error){
+          res.status(400).send(error.details[0].message);
+          return;
+      }
+        course.set({
+            name:req.body.name,
+            price: req.body.price,
+            author : req.body.author,
+        });
+    const result = course.save();
+    console.log("updated  course : ", result);
     });
-const result = await course.save();
-console.log(result);
-}
-// updateCourse('1');
 
-async function removeCourse(id){    //delete
-    const course = await Course
-    .findById(id, function (course) {
-    }).clone().catch(function(err){ console.log(err)});
-
-    if(!course) {console.log('course was not found'); return;}
-    else{
-        const result = await Course.deleteOne({_id:id}); 
-
-        console.log("succesfully Deleted : ", result);
-    }
-}
-//    removeCourse('5a68fdf95db93f6477053ddd');
+router.delete('/courses/delete/:id', async (req, res) => {
+  //delete
+  const course = await Course
+  .findById(req.params.id, function (course) {
+  }).clone().catch(function(err){ console.log(err)});
+  if(!course) {console.log('course was not found'); return;}
+  else{
+      const result = await Course.deleteOne({_id:req.params.id}); 
+      console.log("succesfully Deleted : ", result);
+  }
+});  
    module.exports = router;
+   function validatecourse(course){
+    const schema = Joi.object({
+        name: Joi.string().min(3).required(),
+        author: Joi.string().min(3).required(),
+        price: Joi.number().min(3).required()
+        });
+return schema.validate(course);
+}
